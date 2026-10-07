@@ -42,7 +42,10 @@ jobs:
           sudo pip3 install --break-system-packages 'meson>=1.4,<1.9'
           # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Take 19 from apt.llvm.org and put it first in PATH.
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 19
-          sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19 llvm-19-dev libclang-19-dev
+          # Compiler and linker only: no llvm-19 (llvm-config-19) or llvm-19-dev, or Mesa's meson picks LLVM 19
+          # and then wants LLVMSPIRVLib 19, which noble does not package.
+          sudo apt-get install -y --no-install-recommends clang-19 lld-19
+          ls /usr/bin/llvm-config* ; test ! -e /usr/bin/llvm-config-19
           # Only the compiler and linker move to 19. llvm-config and the LLVM tools stay at 18 so Mesa's
           # host build keeps matching Ubuntu's LLVMSPIRVLib 18 (there is no 19 package for noble).
           for t in clang clang++ ld.lld lld; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
