@@ -56,8 +56,12 @@ jobs:
           for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
           clang --version | head -1; ld.lld --version | head -1; meson --version
 
-      - name: Drop any cached RPCS3 checkout without its git handle
-        run: rm -rf src/rpcs3
+      - name: Drop cached items that bake in the host compiler or lack their git handle
+        run: |
+          rm -rf src/rpcs3
+          # The SDK's bin/clang is linked to whatever clang the installer found at the time (18 on the
+          # first run). Reinstall it every run so it picks up clang 19 from /usr/local/bin.
+          rm -rf deps/sdk-rpcs3 deps/ps5-extra-libs
 
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
         run: bash tools/bootstrap.sh
