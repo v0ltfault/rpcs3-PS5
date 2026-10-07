@@ -43,7 +43,9 @@ jobs:
           # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Take 19 from apt.llvm.org and put it first in PATH.
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 19
           sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19 llvm-19-dev libclang-19-dev
-          for t in clang clang++ ld.lld lld llvm-ar llvm-ranlib llvm-nm llvm-objcopy llvm-readobj llvm-config llvm-strip llvm-readelf; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
+          # Only the compiler and linker move to 19. llvm-config and the LLVM tools stay at 18 so Mesa's
+          # host build keeps matching Ubuntu's LLVMSPIRVLib 18 (there is no 19 package for noble).
+          for t in clang clang++ ld.lld lld; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
           # The scripts call the unversioned names.
           sudo ln -sf /usr/bin/llvm-spirv-18 /usr/local/bin/llvm-spirv
           for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
