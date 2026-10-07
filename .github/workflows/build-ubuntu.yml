@@ -27,6 +27,7 @@ jobs:
         with:
           path: |
             deps
+            ~/.cache/ccache
           key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
           restore-keys: |
             rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-
@@ -45,7 +46,9 @@ jobs:
           # author builds with clang 21 on Arch. Add apt.llvm.org and install ONLY clang/lld/llvm 21.
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
           echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main' | sudo tee /etc/apt/sources.list.d/llvm21.list
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-21 lld-21 llvm-21
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-21 lld-21 llvm-21 libclang-rt-21-dev
+          # libclang-rt-21-dev: PS5_Vulkan's radv-link.sh links $(clang --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64.a
+          # (Arch ships it inside compiler-rt; on Ubuntu it is a separate package).
           # llvm-21 provides /usr/lib/llvm-21/bin/llvm-config, which the SDK's shim uses (via LLVM_CONFIG below)
           # to find clang 21. Its /usr/bin/llvm-config-21 link is removed right after so Mesa's meson, which
           # ignores LLVM_CONFIG and takes the highest llvm-config-NN on PATH, keeps using 18.
@@ -71,6 +74,8 @@ jobs:
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
         env:
           LLVM_CONFIG: /usr/lib/llvm-21/bin/llvm-config
+          CCACHE_DIR: /home/runner/.cache/ccache
+          CCACHE_MAXSIZE: 3G
         run: |
           "$LLVM_CONFIG" --version; "$LLVM_CONFIG" --bindir
           bash tools/bootstrap.sh
@@ -88,6 +93,7 @@ jobs:
         with:
           path: |
             deps
+            ~/.cache/ccache
           key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@v4
