@@ -40,20 +40,22 @@ jobs:
             git curl unzip tar pkg-config glslang-tools spirv-tools spirv-headers \
             llvm-spirv-18 libllvmspirvlib-18-dev libclc-18-dev bison flex autoconf automake libtool ccache
           sudo pip3 install --break-system-packages 'meson>=1.4,<1.9'
-          # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Add apt.llvm.org and install ONLY clang/lld 19.
+          # RPCS3 requires clang >= 19, but with -fno-exceptions clang 19 still fails -Werror=return-type on
+          # functions that end in fmt::throw_exception (PPUDisAsm.h, SPUThread.h, atomic.cpp); the upstream
+          # author builds with clang 21 on Arch. Add apt.llvm.org and install ONLY clang/lld/llvm 21.
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main' | sudo tee /etc/apt/sources.list.d/llvm19.list
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19
-          # llvm-19 provides /usr/lib/llvm-19/bin/llvm-config, which the SDK's shim uses (via LLVM_CONFIG below)
-          # to find clang 19. Its /usr/bin/llvm-config-19 link is removed right after so Mesa's meson, which
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main' | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-21 lld-21 llvm-21
+          # llvm-21 provides /usr/lib/llvm-21/bin/llvm-config, which the SDK's shim uses (via LLVM_CONFIG below)
+          # to find clang 21. Its /usr/bin/llvm-config-21 link is removed right after so Mesa's meson, which
           # ignores LLVM_CONFIG and takes the highest llvm-config-NN on PATH, keeps using 18.
           # The runner image preinstalls LLVM 16/17/18/19 tool sets; Mesa's meson takes the highest llvm-config it
           # finds and then wants LLVMSPIRVLib of that version, which noble only packages for 18. Leave only 18.
-          sudo rm -f /usr/bin/llvm-config-19 /usr/bin/llvm-config-17 /usr/bin/llvm-config-16
-          sudo rm -rf /usr/lib/llvm-19/lib/cmake /usr/lib/llvm-17/lib/cmake /usr/lib/llvm-16/lib/cmake
+          sudo rm -f /usr/bin/llvm-config-21 /usr/bin/llvm-config-19 /usr/bin/llvm-config-17 /usr/bin/llvm-config-16
+          sudo rm -rf /usr/lib/llvm-21/lib/cmake /usr/lib/llvm-19/lib/cmake /usr/lib/llvm-17/lib/cmake /usr/lib/llvm-16/lib/cmake
           sudo ln -sf /usr/bin/llvm-config-18 /usr/local/bin/llvm-config
           ls /usr/bin/llvm-config*
-          for t in clang clang++ ld.lld lld; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
+          for t in clang clang++ ld.lld lld; do sudo ln -sf /usr/bin/$t-21 /usr/local/bin/$t; done
           # The scripts call the unversioned names.
           sudo ln -sf /usr/bin/llvm-spirv-18 /usr/local/bin/llvm-spirv
           for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
@@ -63,12 +65,12 @@ jobs:
         run: |
           rm -rf src/rpcs3
           # The SDK's bin/clang is linked to whatever clang the installer found at the time (18 on the
-          # first run). Reinstall it every run so it picks up clang 19 from /usr/local/bin.
+          # first run). Reinstall it every run so it resolves the compiler through LLVM_CONFIG below.
           rm -rf deps/sdk-rpcs3 deps/ps5-extra-libs
 
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
         env:
-          LLVM_CONFIG: /usr/lib/llvm-19/bin/llvm-config
+          LLVM_CONFIG: /usr/lib/llvm-21/bin/llvm-config
         run: |
           "$LLVM_CONFIG" --version; "$LLVM_CONFIG" --bindir
           bash tools/bootstrap.sh
