@@ -27,7 +27,6 @@ jobs:
         with:
           path: |
             deps
-            src/rpcs3
           key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
           restore-keys: |
             rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-
@@ -50,6 +49,9 @@ jobs:
           for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
           clang --version | head -1; ld.lld --version | head -1; meson --version
 
+      - name: Drop any cached RPCS3 checkout without its git handle
+        run: rm -rf src/rpcs3
+
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
         run: bash tools/bootstrap.sh
 
@@ -66,7 +68,6 @@ jobs:
         with:
           path: |
             deps
-            src/rpcs3
           key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@v4
