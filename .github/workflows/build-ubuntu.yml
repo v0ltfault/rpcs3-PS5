@@ -71,14 +71,36 @@ jobs:
           # first run). Reinstall it every run so it resolves the compiler through LLVM_CONFIG below.
           rm -rf deps/sdk-rpcs3 deps/ps5-extra-libs
 
-      - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
+      # tools/bootstrap.sh, split in two so that only RPCS3 sees LLVM_CONFIG: Mesa's meson honours it too
+      # and would then demand LLVMSPIRVLib 21 (run 10). Without it the SDK's clang shim resolves the
+      # plain llvm-config (18) and builds the driver chain, PS5_LLVM and the libraries with clang 18,
+      # exactly as the first runs did; the two compilers share the SDK's libc++ so the objects mix fine.
+      - name: Deps, SDK, RADV driver, PS5 LLVM, zlib, iconv, ffmpeg (clang 18)
+        env:
+          CCACHE_DIR: /home/runner/.cache/ccache
+          CCACHE_MAXSIZE: 3G
+        run: |
+          set -euo pipefail
+          for t in git cmake ninja clang clang++ python3 curl nasm make llvm-spirv glslangValidator; do command -v $t >/dev/null || { echo "missing $t"; exit 2; }; done
+          bash tools/fetch-deps.sh
+          bash tools/install-sdk.sh
+          deps/sdk-rpcs3/bin/clang --version | head -1
+          bash tools/build-driver-chain.sh
+          bash tools/build-llvm.sh
+          bash tools/build-zlib.sh
+          bash tools/build-libiconv.sh
+          bash tools/build-ffmpeg.sh
+          [[ -f deps/config_database.json ]] || bash tools/update-config-database.sh
+
+      - name: RPCS3 (clang 21 through the SDK shim)
         env:
           LLVM_CONFIG: /usr/lib/llvm-21/bin/llvm-config
           CCACHE_DIR: /home/runner/.cache/ccache
           CCACHE_MAXSIZE: 3G
         run: |
-          "$LLVM_CONFIG" --version; "$LLVM_CONFIG" --bindir
-          bash tools/bootstrap.sh
+          "$LLVM_CONFIG" --version; deps/sdk-rpcs3/bin/clang --version | head -1
+          bash tools/build-rpcs3.sh
+          ls -la dist/PPSA99300
 
       - name: Result
         if: always()
