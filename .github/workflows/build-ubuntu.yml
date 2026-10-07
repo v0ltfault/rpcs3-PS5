@@ -41,10 +41,14 @@ jobs:
             git curl unzip tar pkg-config glslang-tools spirv-tools spirv-headers \
             llvm-spirv-18 libllvmspirvlib-18-dev libclc-18-dev bison flex autoconf automake libtool ccache
           sudo pip3 install --break-system-packages 'meson>=1.4,<1.9'
+          # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Take 19 from apt.llvm.org and put it first in PATH.
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 19
+          sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19 llvm-19-dev libclang-19-dev
+          for t in clang clang++ ld.lld lld llvm-ar llvm-ranlib llvm-nm llvm-objcopy llvm-readobj llvm-config llvm-strip llvm-readelf; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
           # The scripts call the unversioned names.
           sudo ln -sf /usr/bin/llvm-spirv-18 /usr/local/bin/llvm-spirv
           for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
-          clang --version | head -1; meson --version
+          clang --version | head -1; ld.lld --version | head -1; meson --version
 
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
         run: bash tools/bootstrap.sh
