@@ -1,0 +1,82 @@
+name: Build (ubuntu-24.04 host)
+
+# Builds dist/PPSA99300 with tools/bootstrap.sh on a GitHub-hosted Ubuntu runner, using
+# Ubuntu's equivalents of the Arch packages the README lists. The result is a private
+# workflow artifact for the repository owner's own console; it is never published
+# (RPCS3 is GPL-2.0-only and the PS5 pieces are GPL-3.0: the combined binary cannot be
+# redistributed, see README.md).
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Restore dependency cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            deps
+            src/rpcs3
+          key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
+          restore-keys: |
+            rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-
+
+      - name: Host tools (Ubuntu equivalents of the Arch package list)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang lld llvm llvm-dev libclang-dev cmake ninja-build nasm make \
+            python3 python3-pip python3-venv python3-ply python3-mako python3-yaml python3-markupsafe \
+            git curl unzip tar pkg-config glslang-tools spirv-tools spirv-headers \
+            llvm-spirv-18 libllvmspirvlib-18-dev libclc-18-dev bison flex autoconf automake libtool ccache
+          sudo pip3 install --break-system-packages 'meson>=1.4,<1.9'
+          # The scripts call the unversioned names.
+          sudo ln -sf /usr/bin/llvm-spirv-18 /usr/local/bin/llvm-spirv
+          for t in clang clang++ llvm-spirv glslangValidator cmake ninja nasm python3 meson; do printf '  %-18s %s\n' "$t" "$(command -v $t || echo MISSING)"; done
+          clang --version | head -1; meson --version
+
+      - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
+        run: bash tools/bootstrap.sh
+
+      - name: Result
+        if: always()
+        run: |
+          ls -la dist/PPSA99300 2>/dev/null || true
+          find build -maxdepth 3 -name 'llvm-pie.elf' -o -maxdepth 3 -name '*.log' 2>/dev/null | head -20
+          df -h /
+
+      - name: Save dependency cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            deps
+            src/rpcs3
+          key: rpcs3-ps5-deps-${{ hashFiles('tools/fetch-deps.sh', 'tools/build-llvm.sh', 'tools/build-ffmpeg.sh', 'tools/build-driver-chain.sh', '.gitmodules') }}-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PPSA99300
+          path: dist/PPSA99300
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-logs
+          path: |
+            build/**/*.log
+            build/**/llvm-pie.elf
+          retention-days: 14
+          if-no-files-found: ignore
