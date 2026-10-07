@@ -43,7 +43,10 @@ jobs:
           # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Add apt.llvm.org and install ONLY clang/lld 19.
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
           echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main' | sudo tee /etc/apt/sources.list.d/llvm19.list
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 lld-19
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19
+          # llvm-19 provides /usr/lib/llvm-19/bin/llvm-config, which the SDK's shim uses (via LLVM_CONFIG below)
+          # to find clang 19. Its /usr/bin/llvm-config-19 link is removed right after so Mesa's meson, which
+          # ignores LLVM_CONFIG and takes the highest llvm-config-NN on PATH, keeps using 18.
           # The runner image preinstalls LLVM 16/17/18/19 tool sets; Mesa's meson takes the highest llvm-config it
           # finds and then wants LLVMSPIRVLib of that version, which noble only packages for 18. Leave only 18.
           sudo rm -f /usr/bin/llvm-config-19 /usr/bin/llvm-config-17 /usr/bin/llvm-config-16
@@ -64,7 +67,11 @@ jobs:
           rm -rf deps/sdk-rpcs3 deps/ps5-extra-libs
 
       - name: Bootstrap (deps, SDK, RADV, LLVM, ffmpeg, RPCS3)
-        run: bash tools/bootstrap.sh
+        env:
+          LLVM_CONFIG: /usr/lib/llvm-19/bin/llvm-config
+        run: |
+          "$LLVM_CONFIG" --version; "$LLVM_CONFIG" --bindir
+          bash tools/bootstrap.sh
 
       - name: Result
         if: always()
