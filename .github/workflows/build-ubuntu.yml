@@ -40,14 +40,16 @@ jobs:
             git curl unzip tar pkg-config glslang-tools spirv-tools spirv-headers \
             llvm-spirv-18 libllvmspirvlib-18-dev libclc-18-dev bison flex autoconf automake libtool ccache
           sudo pip3 install --break-system-packages 'meson>=1.4,<1.9'
-          # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Take 19 from apt.llvm.org and put it first in PATH.
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 19
-          # Compiler and linker only: no llvm-19 (llvm-config-19) or llvm-19-dev, or Mesa's meson picks LLVM 19
-          # and then wants LLVMSPIRVLib 19, which noble does not package.
-          sudo apt-get install -y --no-install-recommends clang-19 lld-19
-          ls /usr/bin/llvm-config* ; test ! -e /usr/bin/llvm-config-19
-          # Only the compiler and linker move to 19. llvm-config and the LLVM tools stay at 18 so Mesa's
-          # host build keeps matching Ubuntu's LLVMSPIRVLib 18 (there is no 19 package for noble).
+          # RPCS3 requires clang >= 19; Ubuntu 24.04 ships 18. Add apt.llvm.org and install ONLY clang/lld 19.
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main' | sudo tee /etc/apt/sources.list.d/llvm19.list
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-19 lld-19
+          # The runner image preinstalls LLVM 16/17/18/19 tool sets; Mesa's meson takes the highest llvm-config it
+          # finds and then wants LLVMSPIRVLib of that version, which noble only packages for 18. Leave only 18.
+          sudo rm -f /usr/bin/llvm-config-19 /usr/bin/llvm-config-17 /usr/bin/llvm-config-16
+          sudo rm -rf /usr/lib/llvm-19/lib/cmake /usr/lib/llvm-17/lib/cmake /usr/lib/llvm-16/lib/cmake
+          sudo ln -sf /usr/bin/llvm-config-18 /usr/local/bin/llvm-config
+          ls /usr/bin/llvm-config*
           for t in clang clang++ ld.lld lld; do sudo ln -sf /usr/bin/$t-19 /usr/local/bin/$t; done
           # The scripts call the unversioned names.
           sudo ln -sf /usr/bin/llvm-spirv-18 /usr/local/bin/llvm-spirv
