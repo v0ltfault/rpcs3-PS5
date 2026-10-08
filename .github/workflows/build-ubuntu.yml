@@ -86,6 +86,7 @@ jobs:
           # fw740 diagnostic: instrument ps5_vrange_commit in the platform layer (committed into the
           # dependency checkout because install-sdk.sh archives HEAD, not the working tree).
           python3 tools/ci/patch-vrange-diag.py deps/PS5_PayloadSDK/platform/src/shm.c
+          python3 tools/ci/patch-exec-probe.py deps/PS5_PayloadSDK/platform/src/shm.c
           git -C deps/PS5_PayloadSDK -c user.name=ci -c user.email=ci@local commit -qam 'fw740: vrange commit diagnostics'
           rm -rf deps/sdk-rpcs3
           bash tools/install-sdk.sh
