@@ -35,14 +35,27 @@ int32_t sceKernelEnableDmemAliasing(void); /* in libkernel's stubs, not in kerne
 #define PR_RW (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_WRITE)
 #define PR_RX (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_EXEC)
 #define PR_RWX (PR_RW | PS5_KERNEL_PROT_CPU_EXEC)
+#include <time.h>
+static double
+probe_now(void)
+{
+   struct timespec ts;
+   clock_gettime(CLOCK_MONOTONIC, &ts);
+   return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
 static void
 probe_log(const char *fmt, ...)
 {
    char line[512];
    va_list ap;
+   int n = snprintf(line, sizeof line - 1, "t=%.3f ", probe_now() - probe_t0);
+   if (n < 0)
+      n = 0;
    va_start(ap, fmt);
-   int n = vsnprintf(line, sizeof line - 1, fmt, ap);
+   const int m = vsnprintf(line + n, sizeof line - 1 - (size_t)n, fmt, ap);
    va_end(ap);
+   if (m > 0)
+      n += m;
    if (n <= 0)
       return;
    if (n > (int)sizeof line - 2)
@@ -444,11 +457,56 @@ probe3_check(unsigned long call, int commit_failed)
    }
    probe_log("probe3 done");
 }
+
+/* Fourth probe: a watcher thread, started at the first commit, tries a plain 64 KiB unit
+ * (RW map, then RX) every 100 ms and logs the monotonic time of the first refusal, so the
+ * moment can be lined up with RPCS3.log. Every probe line now carries that clock too. */
+#include <pthread.h>
+static void *
+probe_watcher(void *arg)
+{
+   (void)arg;
+   unsigned n = 0;
+   for (;;) {
+      int64_t s;
+      void *a;
+      const int32_t rc = probe_chunk(&s, &a, PR_RW);
+      const int32_t rx = rc == 0 ? sceKernelMprotect(a, PS5P_DIRECT_UNIT, PR_RX) : -1;
+      probe_release(s, a);
+      n++;
+      if (rc != 0 || rx != 0) {
+         probe_log("P16 WATCHER: first refusal at t=%.3f s (poll %u) map=%x rx=%x", probe_now() - probe_t0, n,
+                   (unsigned)rc, (unsigned)rx);
+         return NULL;
+      }
+      if (n % 50 == 0)
+         probe_log("P16 watcher alive t=%.3f s polls=%u", probe_now() - probe_t0, n);
+      struct timespec d = {0, 100 * 1000 * 1000};
+      nanosleep(&d, NULL);
+   }
+}
+static void
+probe4_init(void)
+{
+   static atomic_int done;
+   if (atomic_exchange(&done, 1))
+      return;
+   probe_t0 = probe_now();
+   probe_log("P16 watcher start t0 (process clock %.3f s)", probe_t0);
+   pthread_t th;
+   pthread_attr_t attr;
+   pthread_attr_init(&attr);
+   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+   if (pthread_create(&th, &attr, probe_watcher, NULL) != 0)
+      probe_log("P16 watcher thread failed");
+   pthread_attr_destroy(&attr);
+}
 #else
 static void exec_probe(void) {}
 static void exec_probe_reservations(void) {}
 static void probe3_init(void) {}
 static void probe3_check(unsigned long c, int f) { (void)c; (void)f; }
+static void probe4_init(void) {}
 #endif
 /* --- end probe --- */
 '''
@@ -459,6 +517,7 @@ replace("/* --- end diagnostic helpers --- */\n", "/* --- end diagnostic helpers
 # 2. run it at the first commit
 replace(
     "   atomic_fetch_add(&diag_calls, 1);\n",
+    "   probe4_init();\n"
     "   exec_probe();\n"
     "   exec_probe_reservations();\n"
     "   probe3_init();\n"

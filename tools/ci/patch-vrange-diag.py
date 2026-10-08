@@ -45,9 +45,9 @@ replace(
     "   }\n"
     "   char line[320];\n"
     "   const int n = snprintf(line, sizeof line,\n"
-    "      \"commit step=%s at=%lx bytes=%zx prot=%d rc=%x unit=%lx retry_rx_rc=%x calls=%lu exec_calls=%lu \"\n"
+    "      \"t=%.3f commit step=%s at=%lx bytes=%zx prot=%d rc=%x unit=%lx retry_rx_rc=%x calls=%lu exec_calls=%lu \"\n"
     "      \"committed=%lu free=%lu largest=%lu flexible=%lu\\n\",\n"
-    "      step, (unsigned long)at, bytes, wanted, (unsigned)rc, (unsigned long)unit_at, (unsigned)retry_rc,\n"
+    "      probe_now() - probe_t0, step, (unsigned long)at, bytes, wanted, (unsigned)rc, (unsigned long)unit_at, (unsigned)retry_rc,\n"
     "      (unsigned long)atomic_load(&diag_calls), (unsigned long)atomic_load(&diag_exec_calls),\n"
     "      (unsigned long)atomic_load(&committed_bytes), free_b, largest, flex);\n"
     "   if (n <= 0)\n"
@@ -59,6 +59,8 @@ replace(
     "   close(fd);\n"
     "}\n"
     "static void probe3_check(unsigned long call, int commit_failed);\n"
+    "static double probe_now(void);\n"
+    "static double probe_t0;\n"
     "/* --- end diagnostic helpers --- */\n",
 )
 
