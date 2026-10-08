@@ -239,6 +239,9 @@ exec_probe(void)
 static void
 exec_probe_reservations(void)
 {
+   static atomic_int done;
+   if (atomic_exchange(&done, 1))
+      return;
    enum { NRES = 24, RES_BYTES = 0x30000000 };
    void *res[NRES];
    int64_t st[NRES];
@@ -365,6 +368,9 @@ static atomic_int probe3_flipped;
 static void
 probe3_init(void)
 {
+   static atomic_int done;
+   if (atomic_exchange(&done, 1))
+      return;
    if (probe_chunk(&probe3_kept_start, &probe3_kept, PR_RW) == 0) {
       const int32_t rc = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RX);
       probe_log("P13 kept unit at startup: at=%p rx=%x", probe3_kept, (unsigned)rc);
