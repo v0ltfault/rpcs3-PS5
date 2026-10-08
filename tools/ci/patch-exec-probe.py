@@ -35,14 +35,6 @@ int32_t sceKernelEnableDmemAliasing(void); /* in libkernel's stubs, not in kerne
 #define PR_RW (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_WRITE)
 #define PR_RX (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_EXEC)
 #define PR_RWX (PR_RW | PS5_KERNEL_PROT_CPU_EXEC)
-#include <time.h>
-static double
-probe_now(void)
-{
-   struct timespec ts;
-   clock_gettime(CLOCK_MONOTONIC, &ts);
-   return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
-}
 static void
 probe_log(const char *fmt, ...)
 {

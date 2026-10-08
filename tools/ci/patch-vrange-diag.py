@@ -31,6 +31,14 @@ replace(
     "#include <fcntl.h>\n"
     "#include <stdio.h>\n"
     "#include <unistd.h>\n"
+    "#include <time.h>\n"
+    "static double probe_now(void)\n"
+    "{\n"
+    "   struct timespec ts;\n"
+    "   clock_gettime(CLOCK_MONOTONIC, &ts);\n"
+    "   return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;\n"
+    "}\n"
+    "static double probe_t0;\n"
     "static atomic_uint_fast64_t diag_calls, diag_exec_calls;\n"
     "static void\n"
     "vrange_diag(const char *step, uintptr_t at, size_t bytes, int wanted, int32_t rc, uintptr_t unit_at,\n"
@@ -59,8 +67,6 @@ replace(
     "   close(fd);\n"
     "}\n"
     "static void probe3_check(unsigned long call, int commit_failed);\n"
-    "static double probe_now(void);\n"
-    "static double probe_t0;\n"
     "/* --- end diagnostic helpers --- */\n",
 )
 
