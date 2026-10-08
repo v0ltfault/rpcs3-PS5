@@ -44,7 +44,7 @@ namespace
 		usz size = 0;
 		usz used = 0;
 		bool tried = false;
-		shared_mutex mutex;
+		std::mutex mutex;
 
 		bool contains(const void* p) const
 		{
@@ -121,7 +121,7 @@ namespace
 patch(vm, [
     # the pool, right after the PS5 includes
     ("#ifdef __PROSPERO__\n#include <ps5platform/kernel.h>\n#include <ps5platform/shm.h>\n",
-     "#ifdef __PROSPERO__\n#include <ps5platform/kernel.h>\n#include <ps5platform/shm.h>\n#include <cstdlib>\n#include <cstring>\n" + POOL),
+     "#ifdef __PROSPERO__\n#include <ps5platform/kernel.h>\n#include <ps5platform/shm.h>\n#include <cstdlib>\n#include <cstring>\n#include <mutex>\n" + POOL),
     # memory_reserve: JIT reservations come from the pool
     ("		// budget: reserve address space with the platform layer (never inside the GPU window).\n		// Committed memory is direct memory, see memory_commit.\n		if (use_addr && reinterpret_cast<uptr>(use_addr) % 0x10000)\n",
      "		// budget: reserve address space with the platform layer (never inside the GPU window).\n		// Committed memory is direct memory, see memory_commit.\n		if (can_be_jit && !use_addr)\n		{\n			if (void* slice = g_ps5_exec_pool.take(utils::align(size, 0x10000)))\n			{\n				return slice;\n			}\n		}\n		if (use_addr && reinterpret_cast<uptr>(use_addr) % 0x10000)\n"),
