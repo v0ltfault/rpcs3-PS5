@@ -355,9 +355,94 @@ exec_probe_reservations(void)
    }
    probe_log("probe2 done");
 }
+
+/* Third probe: when does the rule flip? A plain 64 KiB unit (RW map, then RX) is tried on
+ * every executable commit; the full set runs again at the first refused commit. One unit
+ * made executable at startup is kept, to see whether its protection can still change later. */
+static void *probe3_kept;
+static int64_t probe3_kept_start = -1;
+static atomic_int probe3_flipped;
+static void
+probe3_init(void)
+{
+   if (probe_chunk(&probe3_kept_start, &probe3_kept, PR_RW) == 0) {
+      const int32_t rc = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RX);
+      probe_log("P13 kept unit at startup: at=%p rx=%x", probe3_kept, (unsigned)rc);
+   }
+}
+static void
+probe3_check(unsigned long call, int commit_failed)
+{
+   int64_t s;
+   void *a;
+   int32_t rc = probe_chunk(&s, &a, PR_RW);
+   const int32_t rx = rc == 0 ? sceKernelMprotect(a, PS5P_DIRECT_UNIT, PR_RX) : -1;
+   probe_release(s, a);
+   if (rx != 0 && !atomic_exchange(&probe3_flipped, 1))
+      probe_log("P14 FLIP: plain unit RX first refused at exec call %lu (commit_failed=%d) rc=%x", call, commit_failed, (unsigned)rx);
+   if (call <= 60 || commit_failed)
+      probe_log("P14 call=%lu commit_failed=%d plain unit: map=%x rx=%x", call, commit_failed, (unsigned)rc, (unsigned)rx);
+   if (!commit_failed)
+      return;
+   static atomic_int full_done;
+   if (atomic_exchange(&full_done, 1))
+      return;
+   /* full set at the first refused commit */
+   {
+      void *anon = mmap(NULL, PS5P_DIRECT_UNIT, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      if (anon != MAP_FAILED) {
+         const int r = mprotect(anon, PS5P_DIRECT_UNIT, PROT_READ | PROT_EXEC);
+         probe_log("P15 anon RW->RX at failure: rc=%d errno=%d", r, r ? errno : 0);
+         munmap(anon, PS5P_DIRECT_UNIT);
+      }
+   }
+   if (probe3_kept) {
+      void *alias = NULL;
+      int32_t m = sceKernelMapDirectMemory(&alias, PS5P_DIRECT_UNIT, PS5_KERNEL_PROT_CPU_READ, 0, probe3_kept_start,
+                                           PS5P_DIRECT_UNIT);
+      const int32_t x = m == 0 ? sceKernelMprotect(alias, PS5P_DIRECT_UNIT, PR_RX) : -1;
+      probe_log("P15 alias R->RX at failure: map=%x rx=%x", (unsigned)m, (unsigned)x);
+      if (m == 0)
+         sceKernelMunmap(alias, PS5P_DIRECT_UNIT);
+      const int32_t a = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RW);
+      const int32_t b = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RX);
+      const int32_t c = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RWX);
+      const int32_t d = sceKernelMprotect(probe3_kept, PS5P_DIRECT_UNIT, PR_RX);
+      probe_log("P15 kept exec unit toggles at failure: ->RW=%x ->RX=%x ->RWX=%x ->RX=%x", (unsigned)a, (unsigned)b,
+                (unsigned)c, (unsigned)d);
+   }
+   {
+      void *r = NULL;
+      int32_t rc = sceKernelReserveVirtualRange(&r, 0x30000000, 0, PS5P_DIRECT_UNIT);
+      int64_t s4 = -1;
+      void *a4 = NULL;
+      int32_t rc2 = -1, rc3 = -1;
+      if (rc == 0) {
+         rc2 = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), PS5P_DIRECT_UNIT, PS5P_DIRECT_UNIT,
+                                             PS5_KERNEL_DIRECT_TYPE_CPU, &s4);
+         if (rc2 == 0) {
+            a4 = r;
+            rc2 = sceKernelMapDirectMemory(&a4, PS5P_DIRECT_UNIT, PR_RW, PS5_KERNEL_MAP_FIXED, s4, PS5P_PAGE);
+            if (rc2 == 0)
+               rc3 = sceKernelMprotect(a4, PS5P_DIRECT_UNIT, PR_RX);
+         }
+      }
+      probe_log("P15 unit in a fresh reservation at failure: reserve=%x map=%x rx=%x", (unsigned)rc, (unsigned)rc2,
+                (unsigned)rc3);
+      if (a4 && rc2 == 0)
+         sceKernelMunmap(a4, PS5P_DIRECT_UNIT);
+      if (s4 >= 0)
+         sceKernelReleaseDirectMemory(s4, PS5P_DIRECT_UNIT);
+      if (r && rc == 0)
+         sceKernelMunmap(r, 0x30000000);
+   }
+   probe_log("probe3 done");
+}
 #else
 static void exec_probe(void) {}
 static void exec_probe_reservations(void) {}
+static void probe3_init(void) {}
+static void probe3_check(unsigned long c, int f) { (void)c; (void)f; }
 #endif
 /* --- end probe --- */
 '''
@@ -370,6 +455,7 @@ replace(
     "   atomic_fetch_add(&diag_calls, 1);\n",
     "   exec_probe();\n"
     "   exec_probe_reservations();\n"
+    "   probe3_init();\n"
     "   atomic_fetch_add(&diag_calls, 1);\n",
 )
 

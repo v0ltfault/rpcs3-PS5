@@ -58,6 +58,7 @@ replace(
     "   (void)!write(fd, line, (size_t)n);\n"
     "   close(fd);\n"
     "}\n"
+    "static void probe3_check(unsigned long call, int commit_failed);\n"
     "/* --- end diagnostic helpers --- */\n",
 )
 
@@ -141,6 +142,8 @@ replace(
     "         }\n"
     "      }\n"
     "   }\n"
+    "   if (wanted & PS5_KERNEL_PROT_CPU_EXEC)\n"
+    "      probe3_check((unsigned long)atomic_load(&diag_exec_calls), result != 0);\n"
     "   if (result != 0 || (wanted & PS5_KERNEL_PROT_CPU_EXEC))\n"
     "      vrange_diag(result != 0 ? diag_step : \"ok\", begin, bytes, wanted, result, diag_unit, retry_rc);\n"
     "   pthread_mutex_unlock(&units_lock);\n"
