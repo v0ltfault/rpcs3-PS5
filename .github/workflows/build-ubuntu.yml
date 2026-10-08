@@ -83,6 +83,11 @@ jobs:
           set -euo pipefail
           for t in git cmake ninja clang clang++ python3 curl nasm make llvm-spirv glslangValidator; do command -v $t >/dev/null || { echo "missing $t"; exit 2; }; done
           bash tools/fetch-deps.sh
+          # fw740 diagnostic: instrument ps5_vrange_commit in the platform layer (committed into the
+          # dependency checkout because install-sdk.sh archives HEAD, not the working tree).
+          python3 tools/ci/patch-vrange-diag.py deps/PS5_PayloadSDK/platform/src/shm.c
+          git -C deps/PS5_PayloadSDK -c user.name=ci -c user.email=ci@local commit -qam 'fw740: vrange commit diagnostics'
+          rm -rf deps/sdk-rpcs3
           bash tools/install-sdk.sh
           deps/sdk-rpcs3/bin/clang --version | head -1
           bash tools/build-driver-chain.sh
