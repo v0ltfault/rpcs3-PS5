@@ -232,8 +232,132 @@ exec_probe(void)
    }
    probe_log("probe done");
 }
+
+/* Second probe: reservations. RPCS3 gives every LLVM memory manager its own 768 MiB
+ * sceKernelReserveVirtualRange and commits 64 KiB units into it; the refusals began at the
+ * 11th such range. */
+static void
+exec_probe_reservations(void)
+{
+   enum { NRES = 24, RES_BYTES = 0x30000000 };
+   void *res[NRES];
+   int64_t st[NRES];
+   void *at[NRES];
+   int nres = 0, first_fail = -1;
+   int32_t fail_rc = 0;
+   /* P9: one exec unit in each of up to 24 reservations */
+   for (int i = 0; i < NRES; i++) {
+      res[i] = NULL;
+      st[i] = -1;
+      at[i] = NULL;
+      int32_t rc = sceKernelReserveVirtualRange(&res[i], RES_BYTES, 0, PS5P_DIRECT_UNIT);
+      if (rc != 0) {
+         probe_log("P9 i=%d reserve rc=%x", i, (unsigned)rc);
+         res[i] = NULL;
+         break;
+      }
+      nres = i + 1;
+      rc = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), PS5P_DIRECT_UNIT, PS5P_DIRECT_UNIT,
+                                         PS5_KERNEL_DIRECT_TYPE_CPU, &st[i]);
+      if (rc != 0) {
+         probe_log("P9 i=%d alloc rc=%x", i, (unsigned)rc);
+         break;
+      }
+      at[i] = res[i];
+      rc = sceKernelMapDirectMemory(&at[i], PS5P_DIRECT_UNIT, PR_RW, PS5_KERNEL_MAP_FIXED, st[i], PS5P_PAGE);
+      if (rc != 0) {
+         probe_log("P9 i=%d map rc=%x", i, (unsigned)rc);
+         at[i] = NULL;
+         break;
+      }
+      rc = sceKernelMprotect(at[i], PS5P_DIRECT_UNIT, PR_RX);
+      if (rc != 0 && first_fail < 0) {
+         first_fail = i;
+         fail_rc = rc;
+      }
+      if (rc != 0)
+         probe_log("P9 i=%d res=%p RX rc=%x", i, res[i], (unsigned)rc);
+   }
+   probe_log("P9 exec in own reservations x%d: first_fail=%d rc=%x", nres, first_fail, (unsigned)fail_rc);
+   /* P10: a plain exec unit (no reservation) while those reservations exist */
+   {
+      int64_t s2;
+      void *a2;
+      int32_t rc = probe_chunk(&s2, &a2, PR_RW);
+      const int32_t rc2 = rc == 0 ? sceKernelMprotect(a2, PS5P_DIRECT_UNIT, PR_RX) : -1;
+      probe_log("P10 plain unit with %d reservations live: map=%x rx=%x", nres, (unsigned)rc, (unsigned)rc2);
+      probe_release(s2, a2);
+   }
+   /* P11: 24 exec units inside ONE reservation (the first) */
+   if (nres > 0) {
+      int ff = -1;
+      int64_t s3[NRES];
+      void *a3[NRES];
+      int n3 = 0;
+      for (int i = 0; i < NRES; i++) {
+         s3[i] = -1;
+         a3[i] = NULL;
+         int32_t rc = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), PS5P_DIRECT_UNIT,
+                                                    PS5P_DIRECT_UNIT, PS5_KERNEL_DIRECT_TYPE_CPU, &s3[i]);
+         if (rc != 0)
+            break;
+         a3[i] = (char *)res[0] + (size_t)(i + 1) * 0x100000;
+         rc = sceKernelMapDirectMemory(&a3[i], PS5P_DIRECT_UNIT, PR_RW, PS5_KERNEL_MAP_FIXED, s3[i], PS5P_PAGE);
+         if (rc != 0) {
+            a3[i] = NULL;
+            break;
+         }
+         n3 = i + 1;
+         rc = sceKernelMprotect(a3[i], PS5P_DIRECT_UNIT, PR_RX);
+         if (rc != 0 && ff < 0)
+            ff = i;
+      }
+      probe_log("P11 exec units inside one reservation x%d: first_fail=%d", n3, ff);
+      for (int i = 0; i < n3; i++) {
+         if (a3[i])
+            sceKernelMunmap(a3[i], PS5P_DIRECT_UNIT);
+         if (s3[i] >= 0)
+            sceKernelReleaseDirectMemory(s3[i], PS5P_DIRECT_UNIT);
+      }
+   }
+   /* P12: free everything, then one exec unit in a fresh reservation */
+   for (int i = 0; i < nres; i++) {
+      if (at[i])
+         sceKernelMunmap(at[i], PS5P_DIRECT_UNIT);
+      if (st[i] >= 0)
+         sceKernelReleaseDirectMemory(st[i], PS5P_DIRECT_UNIT);
+      if (res[i])
+         sceKernelMunmap(res[i], RES_BYTES);
+   }
+   {
+      void *r = NULL;
+      int32_t rc = sceKernelReserveVirtualRange(&r, RES_BYTES, 0, PS5P_DIRECT_UNIT);
+      int64_t s4 = -1;
+      void *a4 = NULL;
+      int32_t rc2 = -1, rc3 = -1;
+      if (rc == 0) {
+         rc2 = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), PS5P_DIRECT_UNIT, PS5P_DIRECT_UNIT,
+                                             PS5_KERNEL_DIRECT_TYPE_CPU, &s4);
+         if (rc2 == 0) {
+            a4 = r;
+            rc2 = sceKernelMapDirectMemory(&a4, PS5P_DIRECT_UNIT, PR_RW, PS5_KERNEL_MAP_FIXED, s4, PS5P_PAGE);
+            if (rc2 == 0)
+               rc3 = sceKernelMprotect(a4, PS5P_DIRECT_UNIT, PR_RX);
+         }
+      }
+      probe_log("P12 after freeing all reservations: reserve=%x map=%x rx=%x", (unsigned)rc, (unsigned)rc2, (unsigned)rc3);
+      if (a4 && rc2 == 0)
+         sceKernelMunmap(a4, PS5P_DIRECT_UNIT);
+      if (s4 >= 0)
+         sceKernelReleaseDirectMemory(s4, PS5P_DIRECT_UNIT);
+      if (r && rc == 0)
+         sceKernelMunmap(r, RES_BYTES);
+   }
+   probe_log("probe2 done");
+}
 #else
 static void exec_probe(void) {}
+static void exec_probe_reservations(void) {}
 #endif
 /* --- end probe --- */
 '''
@@ -245,6 +369,7 @@ replace("/* --- end diagnostic helpers --- */\n", "/* --- end diagnostic helpers
 replace(
     "   atomic_fetch_add(&diag_calls, 1);\n",
     "   exec_probe();\n"
+    "   exec_probe_reservations();\n"
     "   atomic_fetch_add(&diag_calls, 1);\n",
 )
 
