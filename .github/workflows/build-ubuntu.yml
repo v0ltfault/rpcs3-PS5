@@ -7,6 +7,11 @@ name: Build (ubuntu-24.04 host)
 # redistributed, see README.md).
 on:
   workflow_dispatch:
+    inputs:
+      probes:
+        description: 'include the exec-memory probes (diagnostic builds only)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -83,10 +88,12 @@ jobs:
           set -euo pipefail
           for t in git cmake ninja clang clang++ python3 curl nasm make llvm-spirv glslangValidator; do command -v $t >/dev/null || { echo "missing $t"; exit 2; }; done
           bash tools/fetch-deps.sh
+          # fw 7.40 fix: executable pool granted at startup (RPCS3 sources are re-fetched every run)
+          python3 tools/ci/patch-rpcs3-execpool.py src/rpcs3
           # fw740 diagnostic: instrument ps5_vrange_commit in the platform layer (committed into the
           # dependency checkout because install-sdk.sh archives HEAD, not the working tree).
           python3 tools/ci/patch-vrange-diag.py deps/PS5_PayloadSDK/platform/src/shm.c
-          python3 tools/ci/patch-exec-probe.py deps/PS5_PayloadSDK/platform/src/shm.c
+          if [[ '${{ inputs.probes }}' == 'true' ]]; then python3 tools/ci/patch-exec-probe.py deps/PS5_PayloadSDK/platform/src/shm.c; else echo 'probes off'; fi
           git -C deps/PS5_PayloadSDK -c user.name=ci -c user.email=ci@local commit -qam 'fw740: vrange commit diagnostics'
           rm -rf deps/sdk-rpcs3
           bash tools/install-sdk.sh
