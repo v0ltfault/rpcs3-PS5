@@ -31,6 +31,7 @@ PROBE = r'''
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/mman.h>
+int32_t sceKernelEnableDmemAliasing(void); /* in libkernel's stubs, not in kernel.h */
 #define PR_RW (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_WRITE)
 #define PR_RX (PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_EXEC)
 #define PR_RWX (PR_RW | PS5_KERNEL_PROT_CPU_EXEC)
