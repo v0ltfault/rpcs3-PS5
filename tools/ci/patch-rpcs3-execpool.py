@@ -144,6 +144,8 @@ patch(vm, [
 
 jit = os.path.join(root, "Utilities/JITLLVM.cpp")
 patch(jit, [
+    ("		if (flags & 0x1)\n		{\n			mem = std::make_unique<MemoryManager1>(std::move(symbols_cement));\n		}\n		else\n		{\n			mem = std::make_unique<MemoryManager2>(std::move(symbols_cement));\n			null_mod->setTargetTriple(llvm::Triple(jit_compiler::triple2()));\n		}\n",
+     "#ifdef __PROSPERO__\n		// PS5 7.40: every module, cached-object loads included, takes its sections from the pool.\n		(void)flags;\n		mem = std::make_unique<MemoryManager2>(std::move(symbols_cement));\n		null_mod->setTargetTriple(llvm::Triple(jit_compiler::triple2()));\n#else\n		if (flags & 0x1)\n		{\n			mem = std::make_unique<MemoryManager1>(std::move(symbols_cement));\n		}\n		else\n		{\n			mem = std::make_unique<MemoryManager2>(std::move(symbols_cement));\n			null_mod->setTargetTriple(llvm::Triple(jit_compiler::triple2()));\n		}\n#endif\n"),
     ("	else\n	{\n		mem = std::make_unique<MemoryManager1>(std::move(symbols_cement));\n	}\n",
      "	else\n	{\n#ifdef __PROSPERO__\n		// PS5 7.40: code must come from the executable pool jit_runtime lives in (see\n		// tools/ci/patch-rpcs3-execpool.py in rpcs3-PS5), not a fresh region per module.\n		mem = std::make_unique<MemoryManager2>(std::move(symbols_cement));\n		null_mod->setTargetTriple(llvm::Triple(jit_compiler::triple2()));\n#else\n		mem = std::make_unique<MemoryManager1>(std::move(symbols_cement));\n#endif\n	}\n"),
 ])
