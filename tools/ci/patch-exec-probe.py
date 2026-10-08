@@ -504,6 +504,7 @@ static void probe4_init(void) {}
 '''
 
 # 1. probe after the diagnostic helpers
+replace("/* --- fw740 diagnostic (see tools/ci/patch-vrange-diag.py in rpcs3-PS5) --- */\n", "#define FW740_PROBES 1\n/* --- fw740 diagnostic (see tools/ci/patch-vrange-diag.py in rpcs3-PS5) --- */\n")
 replace("/* --- end diagnostic helpers --- */\n", "/* --- end diagnostic helpers --- */\n" + PROBE)
 
 # 2. run it at the first commit

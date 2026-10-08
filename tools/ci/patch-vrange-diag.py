@@ -66,7 +66,11 @@ replace(
     "   (void)!write(fd, line, (size_t)n);\n"
     "   close(fd);\n"
     "}\n"
+    "#ifndef FW740_PROBES\n"
+    "static void probe3_check(unsigned long call, int commit_failed) { (void)call; (void)commit_failed; }\n"
+    "#else\n"
     "static void probe3_check(unsigned long call, int commit_failed);\n"
+    "#endif\n"
     "/* --- end diagnostic helpers --- */\n",
 )
 
