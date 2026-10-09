@@ -12,6 +12,10 @@ on:
         description: 'include the exec-memory probes (diagnostic builds only)'
         type: boolean
         default: false
+      execpool:
+        description: 'PS5 exec pool + MemoryManager2 patch (only needed if kstuff gets paused)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -95,7 +99,9 @@ jobs:
           for t in git cmake ninja clang clang++ python3 curl nasm make llvm-spirv glslangValidator; do command -v $t >/dev/null || { echo "missing $t"; exit 2; }; done
           bash tools/fetch-deps.sh
           # fw 7.40 fix: executable pool granted at startup (RPCS3 sources are re-fetched every run)
-          python3 tools/ci/patch-rpcs3-execpool.py src/rpcs3
+          # The exec pool was a workaround for ShadowMountPlus pausing kstuff; with kstuff_no_pause=PPSA99300
+          # the stock JIT memory code works, so the pool is opt-in now (workflow input execpool).
+          if [[ '${{ inputs.execpool }}' == 'true' ]]; then python3 tools/ci/patch-rpcs3-execpool.py src/rpcs3; else echo 'exec pool off'; fi
           python3 tools/ci/patch-rpcs3-ps5-misc.py src/rpcs3
           # fw740 diagnostic: instrument ps5_vrange_commit in the platform layer (committed into the
           # dependency checkout because install-sdk.sh archives HEAD, not the working tree).
