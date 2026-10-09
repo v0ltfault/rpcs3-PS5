@@ -96,6 +96,7 @@ jobs:
           bash tools/fetch-deps.sh
           # fw 7.40 fix: executable pool granted at startup (RPCS3 sources are re-fetched every run)
           python3 tools/ci/patch-rpcs3-execpool.py src/rpcs3
+          python3 tools/ci/patch-rpcs3-ps5-misc.py src/rpcs3
           # fw740 diagnostic: instrument ps5_vrange_commit in the platform layer (committed into the
           # dependency checkout because install-sdk.sh archives HEAD, not the working tree).
           python3 tools/ci/patch-vrange-diag.py deps/PS5_PayloadSDK/platform/src/shm.c
