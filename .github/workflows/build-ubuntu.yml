@@ -84,6 +84,12 @@ jobs:
         env:
           CCACHE_DIR: /home/runner/.cache/ccache
           CCACHE_MAXSIZE: 3G
+          # The SDK (and its compiler shim) is reinstalled every run: hash the compiler by content,
+          # not mtime, or every object misses. Paths are stable on the runner; basedir makes them relative.
+          CCACHE_COMPILERCHECK: content
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_NOHASHDIR: 'true'
+          CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
         run: |
           set -euo pipefail
           for t in git cmake ninja clang clang++ python3 curl nasm make llvm-spirv glslangValidator; do command -v $t >/dev/null || { echo "missing $t"; exit 2; }; done
@@ -110,9 +116,16 @@ jobs:
           LLVM_CONFIG: /usr/lib/llvm-21/bin/llvm-config
           CCACHE_DIR: /home/runner/.cache/ccache
           CCACHE_MAXSIZE: 3G
+          # The SDK (and its compiler shim) is reinstalled every run: hash the compiler by content,
+          # not mtime, or every object misses. Paths are stable on the runner; basedir makes them relative.
+          CCACHE_COMPILERCHECK: content
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_NOHASHDIR: 'true'
+          CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
         run: |
           "$LLVM_CONFIG" --version; deps/sdk-rpcs3/bin/clang --version | head -1
           bash tools/build-rpcs3.sh
+          ccache -s || true
           ls -la dist/PPSA99300
 
       - name: Result
